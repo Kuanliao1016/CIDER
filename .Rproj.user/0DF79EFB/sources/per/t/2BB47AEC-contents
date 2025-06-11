@@ -1,0 +1,34 @@
+library(dplyr)
+library(ggplot2)
+library(lme4)
+pgi_s <- read.csv("example_data/pgi_s.csv")
+
+
+# Prepare data
+pgi_s <- pgi_s %>%
+  mutate(
+    SSID = as.factor(SSID),
+    timepoint = as.integer(timepoint),
+    PGI_S = as.numeric(PGI_S),
+    PROM = as.numeric(PROM)
+  )
+
+
+pgi_s <- pgi_s %>%
+  arrange(SSID, timepoint) %>% 
+  group_by(SSID) %>%
+  mutate(
+    PGI_S_chg = PGI_S - lag(PGI_S),
+    PROM_chg = PROM - lag(PROM)
+  ) %>%
+  ungroup()
+
+
+ggplot(pgi_s, aes(x = PGI_S_chg, y = PROM_chg)) +
+  geom_point(color = "grey30") +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  labs(x = "Change in Patient Global Impression of Severity", y = "Change in PROM")
+
+
+model <- lmer(PROM_chg ~ PGI_S_chg + (1 | SSID), data = pgi_s)
+coef_md1 <- summary(model)
