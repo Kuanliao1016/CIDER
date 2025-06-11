@@ -29,8 +29,8 @@ ui <- fluidPage(
     
     mainPanel(
       plotOutput("scatter_plot"),
-      uiOutput("results_ui"),
-      plotOutput("forest_plot")
+      plotOutput("forest_plot"),
+      uiOutput("results_ui")
     )
   )
 )
@@ -83,25 +83,14 @@ server <- function(input, output) {
   })
   
   output$results_ui <- renderUI({
-    req(input$run, input$PROM_type == "continuous")
+    req(input$run)
     tagList(
-      h4("Estimated Coefficient and 95% CI for PGI-C"),
+      
       tableOutput("ci_table")
     )
   })
   
-  output$ci_table <- renderTable({
-    req(input$PROM_type == "continuous")
-    model <- model_fit()
-    coef_md1 <- summary(model)
-    coefci_md1 <- confint(model, method = "boot")
-    
-    data.frame(
-      coefficient = coef_md1$coefficients["PGI_C", "Estimate"],
-      lower_ci = coefci_md1["PGI_C", 1],
-      upper_ci = coefci_md1["PGI_C", 2]
-    )
-  }, rownames = FALSE)
+
   
   output$forest_plot <- renderPlot({
     req(input$run)
@@ -141,6 +130,41 @@ server <- function(input, output) {
         plot.title = element_text(face = "bold")
       )
   })
+  
+  
+  output$ci_table <- renderTable({
+    req(model_fit())
+    
+    model <- model_fit()
+    
+    new_data <- if (input$PROM_type == "continuous") {
+      data.frame(PGI_C = 1:7, SSID = NA)
+    } else {
+      data.frame(PGI_C = as.factor(1:7), SSID = NA)
+    }
+    
+    boot_fun <- function(fit) {
+      predict(fit, newdata = new_data, re.form = NA)
+    }
+    
+    set.seed(123)
+    boot_res <- bootMer(model, boot_fun, nsim = 1000)
+    cis <- apply(boot_res$t, 2, quantile, probs = c(0.025, 0.975))
+    
+    new_data$lower_ci <- cis[1, ]
+    new_data$upper_ci <- cis[2, ]
+    new_data$predicted <- predict(model, newdata = new_data, re.form = NA)
+    
+    new_data <- new_data%>%mutate(
+      PGI_C = PGI_C,
+      Expected_PROM = predicted,
+      lower_ci = lower_ci,
+      upper_ci = upper_ci
+    )%>%select(
+      PGI_C,Expected_PROM,lower_ci,upper_ci
+    )
+    new_data
+  }, striped = TRUE)
 }
 
 shinyApp(ui, server)
