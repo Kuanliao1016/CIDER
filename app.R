@@ -3,9 +3,10 @@ library(dplyr)
 library(lme4)
 library(ggplot2)
 library(boot)
-##########ui###############
+
+########## UI ##########
 ui <- fluidPage(
-  titlePanel("CIDER - Clinically Important Difference Estimating and Rating using anchor-based approach"),
+  titlePanel("CIDER - Clinically Important Difference Estimation and Rating using anchor-based approach"),
   
   sidebarLayout(
     sidebarPanel(
@@ -14,15 +15,13 @@ ui <- fluidPage(
       radioButtons(
         inputId = "PROM_type",
         label = "If your PROM does not have a linear relationship with the anchor, consider treating the PROM as a categorical variable in the analysis.",
-        choices = c("Continuous" = "continuous", "Categorical" = "categorical"),
-        selected = NULL
+        choices = c("Continuous" = "continuous", "Categorical" = "categorical")
       ),
       
       radioButtons(
         inputId = "Anchor_type",
-        label = "Is your anchor a static status (e.g.PGI-S) or global impression of change scale (e.g.PGI-C)",
-        choices = c("Static" = "static", "Change" = "change"),
-        selected = NULL
+        label = "Is your anchor a static status (e.g. PGI-S) or global impression of change scale (e.g. PGI-C)?",
+        choices = c("Static" = "static", "Change" = "change")
       ),
       
       actionButton("run", "Run Analysis")
@@ -31,12 +30,12 @@ ui <- fluidPage(
     mainPanel(
       plotOutput("scatter_plot"),
       uiOutput("results_ui"),
-      plotOutput("forest_plot"),
+      plotOutput("forest_plot")
     )
   )
 )
 
-###############server##########
+########## Server ##########
 server <- function(input, output) {
   
   raw_data <- reactive({
@@ -103,41 +102,38 @@ server <- function(input, output) {
       upper_ci = coefci_md1["PGI_C", 2]
     )
   }, rownames = FALSE)
+  
   output$forest_plot <- renderPlot({
     req(input$run)
-    req(input$PROM_type == "continuous", model_fit())
+    req(model_fit())
     
     model <- model_fit()
     
-    # Create new data for prediction
-    new_data <- data.frame(
-      PGI_C = 1:7,
-      SSID = NA  # not used for marginal predictions
-    )
+    if (input$PROM_type == "continuous") {
+      new_data <- data.frame(PGI_C = 1:7, SSID = NA)
+    } else {
+      new_data <- data.frame(PGI_C = as.factor(1:7), SSID = NA)
+    }
     
-    # Predict fixed effects only
-    new_data$predicted <- predict(model, newdata = new_data, re.form = NA)
-    
-    # Bootstrap for CI
     boot_fun <- function(fit) {
       predict(fit, newdata = new_data, re.form = NA)
     }
     
     set.seed(123)
     boot_res <- bootMer(model, boot_fun, nsim = 1000)
-    
     cis <- apply(boot_res$t, 2, quantile, probs = c(0.025, 0.975))
+    
     new_data$lower_ci <- cis[1, ]
     new_data$upper_ci <- cis[2, ]
+    new_data$predicted <- predict(model, newdata = new_data, re.form = NA)
     
-    # Plot
     ggplot(new_data, aes(x = predicted, y = as.factor(PGI_C))) +
       geom_point(color = "grey10", size = 2) +
       geom_errorbarh(aes(xmin = lower_ci, xmax = upper_ci), height = 0.2, color = "grey30") +
       labs(
-        x = "Change in PROM from Baseline",
+        x = "Predicted PROM Change",
         y = "PGI-C",
-        title = "Forest Plot of Expected PROM Change by PGI-C"
+        title = paste("Forest Plot of Expected PROM Change by PGI-C (", input$PROM_type, ")")
       ) +
       theme_bw() +
       theme(
@@ -145,8 +141,6 @@ server <- function(input, output) {
         plot.title = element_text(face = "bold")
       )
   })
-
 }
 
 shinyApp(ui, server)
-
