@@ -8,7 +8,7 @@ library(boot)
 
 ########## UI ##########
 ui <- fluidPage(
-  titlePanel("CIDER - Clinically Important Difference Estimation and Rating using anchor-based approach"),
+  titlePanel("ESTICID - ESTImating Clinically Important Difference"),
   
   sidebarLayout(
     sidebarPanel(
